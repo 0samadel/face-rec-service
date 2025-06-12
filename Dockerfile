@@ -1,17 +1,17 @@
-# ------------------------------------------------------------------
-# Stage 1: Build Stage - Install dependencies and compile dlib
-# ------------------------------------------------------------------
-# CHANGE THIS LINE: from 'buster' to 'bookworm'
-FROM python:3.9-slim-bookworm AS builder
+# Use the full, non-slim version of Python 3.9 on Debian Bullseye.
+# Bullseye (Debian 11) is a very stable and common choice for this kind of work.
+# This image is larger but contains more build utilities out of the box.
+FROM python:3.9-bullseye AS builder
 
 # Set the working directory
 WORKDIR /app
 
-# Update package lists and install system dependencies required for dlib and opencv
-# The commands stay the same, but they will pull newer versions from Bookworm's repositories
+# Update package list and install build dependencies.
+# We are adding 'pkg-config' which helps cmake find libraries.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
+    pkg-config \
     libopenblas-dev \
     liblapack-dev \
     libjpeg-dev \
@@ -20,16 +20,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy your requirements file
 COPY requirements.txt .
 
-# Install Python packages.
+# Install Python packages
 RUN pip install --no-cache-dir -r requirements.txt
 
-# ------------------------------------------------------------------
-# Stage 2: Final Stage - Create the production image
-# ------------------------------------------------------------------
-# CHANGE THIS LINE TOO: from 'buster' to 'bookworm'
-FROM python:3.9-slim-bookworm
+# --- Final Production Stage ---
+# Start from a clean, smaller image for the final product
+FROM python:3.9-slim-bullseye
 
-# Set the working directory
 WORKDIR /app
 
 # Copy the pre-installed python packages from the 'builder' stage
@@ -41,8 +38,8 @@ COPY . .
 # Make the start.sh script executable
 RUN chmod +x ./start.sh
 
-# Expose the port your app will run on
+# Expose the port
 EXPOSE 10000
 
-# The command to run your application using gunicorn
+# Set the start command
 CMD ["./start.sh"]

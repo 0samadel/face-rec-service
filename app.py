@@ -1,9 +1,7 @@
-# face-rec-service/app.py (FINAL - Corrected DeepFace imports)
+# face-rec-service/app.py (FINAL - Using only documented DeepFace methods)
 
 from flask import Flask, request, jsonify
 from deepface import DeepFace
-# ✅ CORRECTED IMPORT: The functions are now in the 'extendedmodels' module for SFace
-from deepface.extendedmodels import SFace
 import numpy as np
 import base64
 from io import BytesIO
@@ -13,19 +11,19 @@ import traceback
 
 app = Flask(__name__)
 
+# --- Configuration ---
 MODEL_NAME = "SFace"
 DETECTOR_BACKEND = "retinaface"
 
-# Pre-load the model on startup
+# --- Pre-load the model on startup ---
 try:
     print("Loading face recognition model...")
-    # This also implicitly loads the model object we'll use later
     _ = DeepFace.build_model(MODEL_NAME)
     print("Model loaded successfully.")
 except Exception as e:
     print(f"Error loading model on startup: {e}")
 
-
+# --- Helper Function ---
 def b64_to_numpy(b64_string):
     if "data:image" in b64_string:
         b64_string = b64_string.split(',')[1]
@@ -33,6 +31,7 @@ def b64_to_numpy(b64_string):
     pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
     return np.array(pil_img)
 
+# --- API Routes ---
 
 @app.route("/generate-embedding", methods=["POST"])
 def generate_embedding():
@@ -70,32 +69,34 @@ def compare_faces():
         if not stored_embedding_json:
             return jsonify(error="No stored embedding provided."), 400
         
+        # 1. Get the new image from the request
         up_file = request.files["face"]
         img_bytes = up_file.read()
-        np_img = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
+        np_img_to_verify = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
         
-        unknown_embedding_objs = DeepFace.represent(
-            img_path=np_img,
+        # 2. Get the stored embedding
+        stored_embedding = json.loads(stored_embedding_json)
+
+        # 3. Use DeepFace.verify with the correct parameters
+        #    img1_path is the new image
+        #    img2_path can be a pre-calculated embedding
+        result = DeepFace.verify(
+            img1_path=np_img_to_verify,
+            img2_path=stored_embedding,
             model_name=MODEL_NAME,
-            enforce_detection=True,
-            detector_backend=DETECTOR_BACKEND
+            detector_backend=DETECTOR_BACKEND,
+            enforce_detection=True # Ensure a face is found in the new image
         )
-        unknown_embedding = np.array(unknown_embedding_objs[0]['embedding'])
         
-        stored_embedding = np.array(json.loads(stored_embedding_json))
+        is_match = result["verified"]
+        distance = result["distance"]
         
-        # ✅ CORRECTED: Use the 'find_cosine_distance' function directly from the loaded model
-        distance = SFace.find_cosine_distance(unknown_embedding, stored_embedding)
-        
-        # ✅ CORRECTED: Use the 'get_threshold' function directly from the loaded model
-        threshold = SFace.get_threshold()
-        is_match = distance <= threshold
-        
-        print(f"Comparison Result: Distance={distance:.4f}, Threshold={threshold}, Match={is_match}")
+        print(f"Comparison Result: Distance={distance:.4f}, Verified={is_match}")
         
         return jsonify(is_match=is_match), 200
 
     except ValueError as e:
+        # This happens if no face is detected in the uploaded image
         return jsonify(error=f"Could not process image: {e}", is_match=False), 400
     except Exception as e:
         traceback.print_exc()

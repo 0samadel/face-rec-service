@@ -1,4 +1,4 @@
-# face-rec-service/app.py (Updated to use DeepFace)
+# face-rec-service/app.py (FINAL - Using DeepFace.find for verification)
 
 from flask import Flask, request, jsonify
 from deepface import DeepFace
@@ -7,45 +7,33 @@ import base64
 from io import BytesIO
 from PIL import Image
 import json
+import traceback # To get more detailed error logs
 
 app = Flask(__name__)
 
-# Define the model and detector backend we will use consistently.
-# SFace is lightweight and highly accurate. 'retinaface' is a robust detector.
 MODEL_NAME = "SFace"
 DETECTOR_BACKEND = "retinaface"
+DISTANCE_METRIC = "cosine" # Standard for SFace
 
-# --------------------------------------------------
-# Pre-load the model on startup to make the first API call fast.
-# We create a dummy image to pass to the model.
-# --------------------------------------------------
+# Pre-load the model on startup
 try:
     print("Loading face recognition model...")
-    _ = DeepFace.represent(
-        img_path=np.zeros((100, 100, 3)),
-        model_name=MODEL_NAME,
-        detector_backend=DETECTOR_BACKEND
-    )
+    _ = DeepFace.represent(np.zeros((100, 100, 3)), model_name=MODEL_NAME, detector_backend=DETECTOR_BACKEND)
     print("Model loaded successfully.")
 except Exception as e:
     print(f"Error loading model on startup: {e}")
 
-# --------------------------------------------------
-# Helper: Convert base64 string to a NumPy image array
-# --------------------------------------------------
 def b64_to_numpy(b64_string):
+    # ... (this function is correct, no changes needed) ...
     if "data:image" in b64_string:
         b64_string = b64_string.split(',')[1]
     img_bytes = base64.b64decode(b64_string)
     pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
     return np.array(pil_img)
 
-# --------------------------------------------------
-# Main route for generating a face embedding
-# Accepts either a multipart file or a base64 string.
-# --------------------------------------------------
 @app.route("/generate-embedding", methods=["POST"])
 def generate_embedding():
+    # This route is working perfectly, no changes needed.
     try:
         if "face" in request.files:
             up_file = request.files["face"]
@@ -54,31 +42,20 @@ def generate_embedding():
         elif request.json and request.json.get("image_base64"):
             np_img = b64_to_numpy(request.json["image_base64"])
         else:
-            return jsonify(error="No image provided (expected 'face' file or 'image_base64' JSON field)."), 400
+            return jsonify(error="No image provided."), 400
 
-        # Use DeepFace to represent the face as a vector (embedding)
-        # 'enforce_detection=True' ensures it fails if no face is found.
-        embedding_objs = DeepFace.represent(
-            img_path=np_img,
-            model_name=MODEL_NAME,
-            enforce_detection=True,
-            detector_backend=DETECTOR_BACKEND
-        )
-
-        # DeepFace returns a list of objects, one for each detected face. We take the first.
+        embedding_objs = DeepFace.represent(img_path=np_img, model_name=MODEL_NAME, enforce_detection=True, detector_backend=DETECTOR_BACKEND)
         embedding = embedding_objs[0]['embedding']
         return jsonify(embedding=embedding), 200
-
     except ValueError as e:
-        # This specific error is thrown by DeepFace when no face is detected
         return jsonify(error=f"No face detected in the image. Error: {e}"), 400
     except Exception as e:
-        print(f"An unexpected error occurred: {e}")
         return jsonify(error=f"An internal error occurred: {e}"), 500
 
-# --------------------------------------------------
-# Route for comparing a new face to a stored embedding
-# --------------------------------------------------
+
+# =========================================================================
+# ✅ NEW, CORRECTED /compare-faces ROUTE
+# =========================================================================
 @app.route("/compare-faces", methods=["POST"])
 def compare_faces():
     try:
@@ -89,36 +66,42 @@ def compare_faces():
         if not stored_embedding_json:
             return jsonify(error="No stored embedding provided."), 400
 
-        # Convert the stored JSON embedding back to a numpy array
-        stored_embedding = np.array(json.loads(stored_embedding_json))
-
-        # Read the uploaded image
+        # --- This is the new logic using DeepFace.find ---
+        
+        # 1. Get the embedding of the new face image
         up_file = request.files["face"]
         img_bytes = up_file.read()
         np_img = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
-
-        # Use DeepFace.verify() which is optimized for this task
-        result = DeepFace.verify(
-            img1_path=np_img,
-            img2_path=stored_embedding, # DeepFace can accept an embedding directly
+        
+        unknown_embedding_objs = DeepFace.represent(
+            img_path=np_img,
             model_name=MODEL_NAME,
             enforce_detection=True,
             detector_backend=DETECTOR_BACKEND
         )
-
-        return jsonify(is_match=result["verified"]), 200
+        unknown_embedding = unknown_embedding_objs[0]['embedding']
+        
+        # 2. Prepare the stored embedding
+        stored_embedding = np.array(json.loads(stored_embedding_json))
+        
+        # 3. Calculate the distance between the two embeddings
+        distance = DeepFace.dst.findCosineDistance(unknown_embedding, stored_embedding)
+        
+        # 4. Compare distance to the model's threshold
+        # Thresholds are documented by DeepFace. For SFace + Cosine, it's 0.593
+        threshold = 0.593
+        is_match = distance <= threshold
+        
+        print(f"Comparison Result: Distance={distance:.4f}, Threshold={threshold}, Match={is_match}")
+        
+        return jsonify(is_match=is_match), 200
 
     except ValueError as e:
-        # This could happen if no face is detected in the uploaded image
-        return jsonify(error=f"Could not process image. Error: {e}", is_match=False), 400
+        return jsonify(error=f"Could not process image: {e}", is_match=False), 400
     except Exception as e:
-        print(f"An unexpected error occurred during comparison: {e}")
-        return jsonify(error=f"An internal error occurred: {e}", is_match=False), 500
+        traceback.print_exc() # Print full error for debugging
+        return jsonify(error=f"An internal error occurred during comparison: {e}", is_match=False), 500
 
 
-# --------------------------------------------------
-# Entry-point for running the Flask application
-# --------------------------------------------------
 if __name__ == "__main__":
-    # For local development
     app.run(host="0.0.0.0", port=5001, debug=True)

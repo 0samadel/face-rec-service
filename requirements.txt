@@ -1,8 +1,6 @@
 Flask==3.0.3
 numpy==1.24.4
 face_recognition==1.3.0
-# The next line is the critical change.
-# It tells pip to download the pre-compiled dlib wheel directly from this URL.
-https://files.pythonhosted.org/packages/12/35/ac2b3952f4c3905b1b4d32159828d0484a86f9f5f00e9af73e449219b160/dlib-19.22.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+dlib==19.22.0
 gunicorn==22.0.0
 Pillow==10.4.0

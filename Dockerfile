@@ -3,9 +3,10 @@ FROM python:3.9-slim-bullseye
 
 WORKDIR /app
 
-# Install the missing system library required by OpenCV
+# Install the missing system libraries required by OpenCV at runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install python packages

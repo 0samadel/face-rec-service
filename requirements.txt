@@ -1,7 +1,6 @@
-# NEW - CORRECT
 Flask==3.0.3
-numpy==1.24.4  # <-- Change this version
+numpy==1.24.4
 face_recognition==1.3.0
-dlib==19.24.2
+dlib==19.22.0  
 gunicorn==22.0.0
 Pillow==10.4.0

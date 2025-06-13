@@ -1,6 +1,6 @@
 Flask==3.0.3
-numpy==1.24.4
-face_recognition==1.3.0
-dlib==19.22.0
+numpy==1.26.4  # You can go back to a newer numpy
+deepface
 gunicorn==22.0.0
 Pillow==10.4.0
+onnxruntime # Recommended for SFace model

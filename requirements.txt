@@ -1,6 +1,6 @@
 Flask==3.0.3
-numpy==1.26.4  # You can go back to a newer numpy
+numpy>=1.23.0  # deepface is compatible with newer numpy
 deepface
 gunicorn==22.0.0
-Pillow==10.4.0
-onnxruntime # Recommended for SFace model
+Pillow>=9.0.0
+onnxruntime  # Add this for best performance with SFace model

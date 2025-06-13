@@ -1,11 +1,9 @@
-# Use Python 3.8 on Debian Bullseye (Debian 11). This is a very stable and common combination.
-# It provides a newer version of cmake while keeping Python at 3.8.
+# Stick with the stable Python 3.8 on Debian Bullseye
 FROM python:3.8-bullseye
 
-# Set the working directory
 WORKDIR /app
 
-# Install build essentials. The versions on Bullseye are newer and more compatible.
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -15,16 +13,23 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install python packages
+# Copy requirements file
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of the application
+# --- NEW AND IMPROVED PIP INSTALL ---
+# First, upgrade pip, setuptools, and wheel. This is a best practice.
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+
+# Now, install the requirements using the legacy resolver.
+# This flag changes how pip handles dependency conflicts and can solve stubborn issues.
+RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.txt
+
+# Copy the rest of the application code
 COPY . .
 
 # Make the start script executable
 RUN chmod +x ./start.sh
 
-# Expose the port and set the start command
+# Expose the port and set the command
 EXPOSE 10000
 CMD ["./start.sh"]

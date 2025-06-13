@@ -1,6 +1,8 @@
 Flask==3.0.3
-numpy>=1.23.0  # deepface is compatible with newer numpy
+numpy>=1.23.0
 deepface
 gunicorn==22.0.0
 Pillow>=9.0.0
-onnxruntime  # Add this for best performance with SFace model
+onnxruntime
+tensorflow==2.16.2  # Pinning to a stable, slightly older version
+tf-keras          # Add this new required package

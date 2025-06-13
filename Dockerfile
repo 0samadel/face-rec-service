@@ -1,35 +1,30 @@
-# Start with a known stable Python version for dlib compilation
-FROM python:3.8-slim-buster
+# Use Python 3.8 on Debian Bullseye (Debian 11). This is a very stable and common combination.
+# It provides a newer version of cmake while keeping Python at 3.8.
+FROM python:3.8-bullseye
 
 # Set the working directory
 WORKDIR /app
 
-# Combine all system dependency installation and cleanup in one layer
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+# Install build essentials. The versions on Bullseye are newer and more compatible.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
     pkg-config \
     libopenblas-dev \
     liblapack-dev \
-    libjpeg-dev && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
+    libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the requirements file first
+# Copy requirements and install python packages
 COPY requirements.txt .
-
-# Install the Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of your application code
+# Copy the rest of the application
 COPY . .
 
 # Make the start script executable
 RUN chmod +x ./start.sh
 
-# Expose the port Render will use
+# Expose the port and set the start command
 EXPOSE 10000
-
-# Set the command to run your application
 CMD ["./start.sh"]

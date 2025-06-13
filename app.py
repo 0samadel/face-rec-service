@@ -1,8 +1,9 @@
-# face-rec-service/app.py (FINAL - Corrected Indentation and Logic)
+# face-rec-service/app.py (FINAL - Corrected DeepFace imports)
 
 from flask import Flask, request, jsonify
 from deepface import DeepFace
-from deepface.commons import distance as dst
+# ✅ CORRECTED IMPORT: The functions are now in the 'extendedmodels' module for SFace
+from deepface.extendedmodels import SFace
 import numpy as np
 import base64
 from io import BytesIO
@@ -18,11 +19,8 @@ DETECTOR_BACKEND = "retinaface"
 # Pre-load the model on startup
 try:
     print("Loading face recognition model...")
-    _ = DeepFace.represent(
-        img_path=np.zeros((100, 100, 3)),
-        model_name=MODEL_NAME,
-        detector_backend=DETECTOR_BACKEND
-    )
+    # This also implicitly loads the model object we'll use later
+    _ = DeepFace.build_model(MODEL_NAME)
     print("Model loaded successfully.")
 except Exception as e:
     print(f"Error loading model on startup: {e}")
@@ -46,7 +44,7 @@ def generate_embedding():
         elif request.json and request.json.get("image_base64"):
             np_img = b64_to_numpy(request.json["image_base64"])
         else:
-            return jsonify(error="No image provided (expected 'face' file or 'image_base64' JSON field)."), 400
+            return jsonify(error="No image provided."), 400
 
         embedding_objs = DeepFace.represent(
             img_path=np_img,
@@ -54,10 +52,8 @@ def generate_embedding():
             enforce_detection=True,
             detector_backend=DETECTOR_BACKEND
         )
-        
         embedding = embedding_objs[0]['embedding']
         return jsonify(embedding=embedding), 200
-
     except ValueError as e:
         return jsonify(error=f"No face detected in the image. Error: {e}"), 400
     except Exception as e:
@@ -70,7 +66,6 @@ def compare_faces():
     try:
         if "face" not in request.files:
             return jsonify(error="No face image provided for comparison."), 400
-
         stored_embedding_json = request.form.get("stored_embedding")
         if not stored_embedding_json:
             return jsonify(error="No stored embedding provided."), 400
@@ -85,16 +80,18 @@ def compare_faces():
             enforce_detection=True,
             detector_backend=DETECTOR_BACKEND
         )
-        unknown_embedding = unknown_embedding_objs[0]['embedding']
+        unknown_embedding = np.array(unknown_embedding_objs[0]['embedding'])
         
         stored_embedding = np.array(json.loads(stored_embedding_json))
         
-        distance_val = dst.findCosineDistance(unknown_embedding, stored_embedding)
+        # ✅ CORRECTED: Use the 'find_cosine_distance' function directly from the loaded model
+        distance = SFace.find_cosine_distance(unknown_embedding, stored_embedding)
         
-        threshold = dst.getThreshold(MODEL_NAME, "cosine")
-        is_match = distance_val <= threshold
+        # ✅ CORRECTED: Use the 'get_threshold' function directly from the loaded model
+        threshold = SFace.get_threshold()
+        is_match = distance <= threshold
         
-        print(f"Comparison Result: Distance={distance_val:.4f}, Threshold={threshold}, Match={is_match}")
+        print(f"Comparison Result: Distance={distance:.4f}, Threshold={threshold}, Match={is_match}")
         
         return jsonify(is_match=is_match), 200
 

@@ -1,9 +1,9 @@
-# Stick with the stable Python 3.8 on Debian Bullseye
+# Use a modern, stable base image
 FROM python:3.8-bullseye
 
 WORKDIR /app
 
-# Install system dependencies
+# Install all necessary system build tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -16,20 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy requirements file
 COPY requirements.txt .
 
-# --- NEW AND IMPROVED PIP INSTALL ---
-# First, upgrade pip, setuptools, and wheel. This is a best practice.
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel
+# Install Python dependencies in one go
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Now, install the requirements using the legacy resolver.
-# This flag changes how pip handles dependency conflicts and can solve stubborn issues.
-RUN pip install --no-cache-dir --use-deprecated=legacy-resolver -r requirements.txt
-
-# Copy the rest of the application code
+# Copy application code
 COPY . .
 
-# Make the start script executable
+# Make start script executable
 RUN chmod +x ./start.sh
 
-# Expose the port and set the command
+# Expose port and define start command
 EXPOSE 10000
 CMD ["./start.sh"]

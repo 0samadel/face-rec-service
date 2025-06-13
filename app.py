@@ -1,4 +1,4 @@
-# face-rec-service/app.py (FINAL - Most Robust Version)
+# face-rec-service/app.py (Definitive Final Version)
 
 from flask import Flask, request, jsonify
 from deepface import DeepFace
@@ -14,26 +14,17 @@ app = Flask(__name__)
 # --- Configuration ---
 MODEL_NAME = "SFace"
 DETECTOR_BACKEND = "retinaface"
-MODEL = None # Global variable to hold the loaded model
+# For manual comparison, we use cosine. DeepFace.verify internally handles this.
+DISTANCE_METRIC = "cosine" 
 
-# --- Function to load the model once ---
-def load_model():
-    global MODEL
-    if MODEL is None:
-        print("Model is not loaded. Loading now...")
-        try:
-            MODEL = DeepFace.build_model(MODEL_NAME)
-            print("Model loaded successfully.")
-        except Exception as e:
-            print(f"FATAL: Could not load model on startup: {e}")
-            MODEL = "ERROR" # Set a flag to indicate failure
-    elif MODEL == "ERROR":
-        print("Model previously failed to load. Aborting.")
-    else:
-        print("Model is already loaded.")
+# --- Pre-load the model on startup ---
+try:
+    print("Loading face recognition model...")
+    _ = DeepFace.build_model(MODEL_NAME)
+    print("Model loaded successfully.")
+except Exception as e:
+    print(f"Error loading model on startup: {e}")
 
-# Call the function once when the app starts.
-load_model()
 
 # --- Helper Function ---
 def b64_to_numpy(b64_string):
@@ -47,14 +38,10 @@ def b64_to_numpy(b64_string):
 
 @app.route("/generate-embedding", methods=["POST"])
 def generate_embedding():
-    if MODEL == "ERROR":
-        return jsonify(error="Face recognition model is not available."), 503
-
-    # ... (rest of the function is the same)
+    # This route works, no changes needed.
     try:
         if "face" in request.files:
-            up_file = request.files["face"]
-            img_bytes = up_file.read()
+            img_bytes = request.files["face"].read()
             np_img = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
         else:
             return jsonify(error="No image file provided."), 400
@@ -69,14 +56,11 @@ def generate_embedding():
         return jsonify(embedding=embedding), 200
     except Exception as e:
         traceback.print_exc()
-        return jsonify(error=f"Error in generate-embedding: {e}"), 500
+        return jsonify(error=f"An error occurred: {e}"), 500
 
 
 @app.route("/compare-faces", methods=["POST"])
 def compare_faces():
-    if MODEL == "ERROR":
-        return jsonify(error="Face recognition model is not available."), 503
-
     try:
         if "face" not in request.files:
             return jsonify(error="No face image provided for comparison."), 400
@@ -84,43 +68,37 @@ def compare_faces():
         if not stored_embedding_json:
             return jsonify(error="No stored embedding provided."), 400
         
-        up_file = request.files["face"]
-        img_bytes = up_file.read()
+        # 1. Get the new image
+        img_bytes = request.files["face"].read()
         np_img_to_verify = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
         
-        # We don't use DeepFace.verify because we want to compare against our own embedding
-        # So we generate a new embedding and compare distances manually.
-        
-        new_embedding_objs = DeepFace.represent(
-            img_path=np_img_to_verify,
-            model_name=MODEL_NAME,
-            enforce_detection=True,
-            detector_backend=DETECTOR_BACKEND
-        )
-        new_embedding = np.array(new_embedding_objs[0]['embedding'])
-        stored_embedding = np.array(json.loads(stored_embedding_json), dtype=np.float32)
+        # 2. Get the stored embedding
+        stored_embedding = json.loads(stored_embedding_json)
 
-        # Use the distance function from DeepFace's utility modules
-        distance = np.linalg.norm(new_embedding - stored_embedding) # Euclidean distance is also common
+        # 3. ✅ Use the main DeepFace.verify function. This is the most stable method.
+        # It handles all the complex logic internally.
+        result = DeepFace.verify(
+            img1_path=np_img_to_verify,
+            img2_path=stored_embedding, # Pass the embedding directly to img2_path
+            model_name=MODEL_NAME,
+            detector_backend=DETECTOR_BACKEND,
+            distance_metric=DISTANCE_METRIC,
+            enforce_detection=True
+        )
         
-        # Thresholds are model-specific. We need to find the correct one for SFace
-        # For Cosine distance, it's ~0.593. For Euclidean L2, it's different.
-        # Let's use cosine distance for consistency.
-        from deepface.commons.distance import findCosineDistance
-        cosine_distance = findCosineDistance(new_embedding, stored_embedding)
-        threshold = 0.593 # Threshold for SFace with cosine distance
+        is_match = result["verified"]
         
-        is_match = cosine_distance <= threshold
-        
-        print(f"Comparison: Distance={cosine_distance:.4f}, Threshold={threshold}, Match={is_match}")
+        print(f"Comparison Result: {result}")
         
         return jsonify(is_match=is_match), 200
 
     except ValueError as e:
+        # This is often "Face could not be detected."
         return jsonify(error=f"Could not process image: {e}", is_match=False), 400
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=f"An internal error occurred during comparison: {e}", is_match=False), 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)

@@ -1,30 +1,23 @@
-# Use a modern, stable base image
-FROM python:3.8-bullseye
+# We can use the slim image because we are no longer compiling.
+FROM python:3.8-slim-bullseye
 
 WORKDIR /app
 
-# Install all necessary system build tools
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    cmake \
-    pkg-config \
-    libopenblas-dev \
-    liblapack-dev \
-    libjpeg-dev \
-    && rm -rf /var/lib/apt/lists/*
+# We NO LONGER need apt-get install for cmake and build-essential.
+# This makes the build much faster and the image smaller.
 
-# Copy requirements file
+# Copy requirements file.
 COPY requirements.txt .
 
-# Install Python dependencies in one go
+# Install the Python dependencies. Pip will download the pre-compiled wheel.
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
+# Copy the rest of the application code
 COPY . .
 
-# Make start script executable
+# Make the start script executable
 RUN chmod +x ./start.sh
 
-# Expose port and define start command
+# Expose port and set start command
 EXPOSE 10000
 CMD ["./start.sh"]

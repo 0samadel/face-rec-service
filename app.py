@@ -60,6 +60,8 @@ def generate_embedding():
         return jsonify(error=f"An internal error occurred: {e}"), 500
 
 
+# In face-rec-service/app.py
+
 @app.route("/compare-faces", methods=["POST"])
 def compare_faces():
     try:
@@ -74,34 +76,39 @@ def compare_faces():
         img_bytes = up_file.read()
         np_img_to_verify = np.array(Image.open(BytesIO(img_bytes)).convert("RGB"))
         
-        # 2. Get the stored embedding
-        stored_embedding = json.loads(stored_embedding_json)
-
-        # 3. Use DeepFace.verify with the correct parameters
-        #    img1_path is the new image
-        #    img2_path can be a pre-calculated embedding
-        result = DeepFace.verify(
-            img1_path=np_img_to_verify,
-            img2_path=stored_embedding,
+        # 2. Get the embedding of the new image
+        unknown_embedding_objs = DeepFace.represent(
+            img_path=np_img_to_verify,
             model_name=MODEL_NAME,
-            detector_backend=DETECTOR_BACKEND,
-            enforce_detection=True # Ensure a face is found in the new image
+            enforce_detection=True,
+            detector_backend=DETECTOR_BACKEND
+        )
+        unknown_embedding = np.array(unknown_embedding_objs[0]['embedding'])
+        
+        # 3. Prepare the stored embedding with the CORRECT data type
+        stored_embedding = np.array(json.loads(stored_embedding_json), dtype=np.float32)
+        
+        # 4. Use DeepFace.verify()
+        result = DeepFace.verify(
+            img1_path=unknown_embedding, # Pass the embedding directly
+            img2_path=stored_embedding,  # Pass the stored embedding directly
+            model_name=MODEL_NAME,
+            enforce_detection=False # We already have embeddings, no need to detect faces again
         )
         
         is_match = result["verified"]
         distance = result["distance"]
+        threshold = result["threshold"]
         
-        print(f"Comparison Result: Distance={distance:.4f}, Verified={is_match}")
+        print(f"Comparison Result: Distance={distance:.4f}, Threshold={threshold}, Match={is_match}")
         
         return jsonify(is_match=is_match), 200
 
     except ValueError as e:
-        # This happens if no face is detected in the uploaded image
         return jsonify(error=f"Could not process image: {e}", is_match=False), 400
     except Exception as e:
         traceback.print_exc()
         return jsonify(error=f"An internal error occurred during comparison: {e}", is_match=False), 500
-
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
